@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mini-BLIP2 复现要求</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
+
+    :root {
+      --ink: #050505;
+      --muted: rgba(0,0,0,.68);
+      --green: #2f874b;
+      --green-2: #92d7a7;
+      --mint: #e1f5e8;
+      --mint-light: #f4fcf6;
+      --sky: #bde8f7;
+      --sky-2: #e4f7ff;
+      --cream: #faf4ea;
+      --paper: #fffefa;
+      --yellow: #fff0a9;
+      --line: rgba(0,0,0,.08);
+      --shadow: 0 24px 70px rgba(26, 44, 35, .14);
+      --soft-shadow: 0 14px 36px rgba(30, 50, 42, .08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--cream);
+      font-family: "Noto Sans SC", sans-serif;
+    }
+
+    .topbar {
+      height: 44px;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: linear-gradient(90deg, var(--green-2), var(--green) 32%, var(--green) 68%, var(--green-2));
+      font-family: "DM Serif Display", serif;
+      font-size: 19px;
+      font-style: italic;
+    }
+
+    .page {
+      width: min(1540px, calc(100% - 32px));
+      margin: 18px auto 48px;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 430px;
+      border-radius: 34px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 12% 26%, rgba(255,255,255,.78) 0 74px, transparent 76px),
+        radial-gradient(circle at 91% 24%, rgba(255,255,255,.72) 0 94px, transparent 96px),
+        linear-gradient(180deg, var(--sky) 0%, var(--sky-2) 72%, #fff2bb 72% 100%);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(255,255,255,.8);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      left: -2%;
+      right: -2%;
+      bottom: 0;
+      height: 145px;
+      background:
+        linear-gradient(145deg, transparent 0 39%, rgba(255,255,255,.95) 39% 58%, transparent 58%),
+        linear-gradient(25deg, transparent 0 62%, #ffeb90 62% 100%);
+      clip-path: polygon(0 54%, 10% 42%, 22% 58%, 36% 34%, 51% 56%, 65% 24%, 78% 52%, 91% 34%, 100% 53%, 100% 100%, 0 100%);
+      opacity: .98;
+    }
+
+    .nav {
+      position: relative;
+      z-index: 2;
+      width: min(980px, calc(100% - 48px));
+      height: 58px;
+      margin: 16px auto 0;
+      padding: 0 12px 0 24px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.78);
+      border: 1px solid rgba(255,255,255,.95);
+      box-shadow: 0 16px 40px rgba(45, 89, 104, .14);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -1px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .nav a {
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .button {
+      color: white !important;
+      background: #050505;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-weight: 900 !important;
+    }
+
+    .hero-layout {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 1.18fr .82fr;
+      gap: 34px;
+      align-items: center;
+      padding: 58px 66px 70px;
+    }
+
+    .label {
+      display: inline-flex;
+      padding: 9px 15px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.62);
+      border: 1px solid rgba(255,255,255,.88);
+      font-weight: 900;
+      box-shadow: 0 10px 24px rgba(40, 88, 105, .11);
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: "DM Serif Display", serif;
+      font-size: clamp(58px, 6.6vw, 116px);
+      line-height: .9;
+      font-weight: 400;
+      letter-spacing: -3px;
+    }
+
+    .subtitle {
+      max-width: 780px;
+      margin: 24px 0 0;
+      font-size: 18px;
+      line-height: 1.78;
+      color: rgba(0,0,0,.72);
+    }
+
+    .hero-note {
+      border-radius: 28px;
+      padding: 28px;
+      background: rgba(255,255,255,.72);
+      border: 1px solid rgba(255,255,255,.9);
+      box-shadow: var(--soft-shadow);
+    }
+
+    .hero-note h2 {
+      margin: 0 0 12px;
+      font-size: 30px;
+      letter-spacing: -1px;
+    }
+
+    .hero-note p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.78;
+      font-size: 16px;
+    }
+
+    .grid {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: 1.05fr 1fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .card {
+      border-radius: 28px;
+      padding: 28px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      box-shadow: var(--soft-shadow);
+    }
+
+    .span-2 { grid-column: span 2; }
+    .span-3 { grid-column: 1 / -1; }
+    .mint { background: linear-gradient(180deg, var(--mint), var(--mint-light)); }
+    .sky { background: linear-gradient(180deg, #dff5ff, #fbfdff); }
+    .yellow { background: linear-gradient(180deg, var(--yellow), #fffdf4); }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 32px;
+      line-height: 1.15;
+      letter-spacing: -1px;
+    }
+
+    h3 {
+      margin: 20px 0 7px;
+      font-size: 19px;
+    }
+
+    p, li {
+      font-size: 16px;
+      line-height: 1.78;
+      color: var(--muted);
+    }
+
+    p { margin: 10px 0; }
+    ul { margin: 8px 0 0; padding-left: 22px; }
+
+    .link {
+      color: var(--ink);
+      font-weight: 900;
+      text-decoration: none;
+      border-bottom: 2px solid rgba(0,0,0,.22);
+      overflow-wrap: anywhere;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .step {
+      min-height: 112px;
+      border-radius: 22px;
+      padding: 17px;
+      border: 1px solid rgba(0,0,0,.08);
+      background: rgba(255,255,255,.72);
+      box-shadow: 0 12px 28px rgba(0,0,0,.07);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -18px;
+      top: 40px;
+      font-weight: 900;
+      font-size: 23px;
+    }
+
+    .step b { font-size: 15px; }
+    .step span { font-size: 12px; color: rgba(0,0,0,.61); line-height: 1.4; }
+
+    .chips {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .chip {
+      border-radius: 999px;
+      background: rgba(255,255,255,.68);
+      border: 1px solid rgba(0,0,0,.07);
+      padding: 9px 13px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .submit-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .submit-item {
+      min-height: 136px;
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(255,255,255,.66);
+      border: 1px solid rgba(0,0,0,.06);
+      display: grid;
+      grid-template-columns: 46px 1fr;
+      gap: 15px;
+      align-items: start;
+    }
+
+    .num {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: #050505;
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 18px;
+    }
+
+    .submit-item b {
+      display: block;
+      font-size: 19px;
+      margin: 5px 0 6px;
+    }
+
+    .submit-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .footer {
+      margin: 30px 0 0;
+      text-align: center;
+      color: rgba(0,0,0,.48);
+      font-size: 14px;
+    }
+
+    @media (max-width: 1120px) {
+      .hero-layout { grid-template-columns: 1fr; padding: 48px 38px 64px; }
+      .grid { grid-template-columns: 1fr 1fr; }
+      .span-3 { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 780px) {
+      .nav-links { display: none; }
+      .hero-layout { padding: 42px 24px 58px; }
+      .grid { grid-template-columns: 1fr; }
+      .span-2, .span-3 { grid-column: auto; }
+      .flow { grid-template-columns: 1fr; }
+      .step:not(:last-child)::after {
+        content: "↓";
+        top: auto;
+        right: 50%;
+        bottom: -23px;
+        transform: translateX(50%);
+      }
+      .submit-list { grid-template-columns: 1fr; }
+      h1 { letter-spacing: -1.5px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">Mini-BLIP2 Reproduction · Student Brief</div>
+
+  <main class="page">
+    <section class="hero">
+      <nav class="nav">
+        <div class="logo">Mini-BLIP2</div>
+        <div class="nav-links">
+          <a href="#paper">论文</a>
+          <a href="#model">模型</a>
+          <a href="#dataset">数据集</a>
+          <a href="#training">训练</a>
+          <a href="#submit">提交</a>
+        </div>
+        <a class="button" href="#submit">查看要求</a>
+      </nav>
+
+      <div class="hero-layout">
+        <div>
+          <div class="label">图像描述生成复现任务</div>
+          <h1>Build a tiny bridge<br>between images and words</h1>
+          <p class="subtitle">
+            参考 BLIP-2 思想：冻结视觉编码器和语言解码器，自己实现中间的 Mini Q-Former，
+            使用 Flickr8k 前 200 张图片训练，跑通从图片到英文 caption 的完整流程。
+          </p>
+        </div>
+        <aside class="hero-note">
+          <h2>最低目标</h2>
+          <p>不是追求论文指标，而是完成一次可运行的学习复现：能读取数据、搭建模型、训练桥接模块，并输入图片生成英文描述。</p>
+          <div class="chips">
+            <span class="chip">Flickr8k 前 200 张</span>
+            <span class="chip">冻结 CLIP ViT</span>
+            <span class="chip">冻结 OPT-125M</span>
+            <span class="chip">训练 Mini Q-Former</span>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card yellow" id="paper">
+        <h2>1. 复现论文</h2>
+        <p><b>BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models</b></p>
+        <p>论文地址：<a class="link" href="https://arxiv.org/abs/2301.12597" target="_blank" rel="noreferrer">https://arxiv.org/abs/2301.12597</a></p>
+        <p>PDF：<a class="link" href="https://arxiv.org/pdf/2301.12597" target="_blank" rel="noreferrer">https://arxiv.org/pdf/2301.12597</a></p>
+      </article>
+
+      <article class="card mint">
+        <h2>2. 复现目标</h2>
+        <p>实现一个简化版 BLIP-2，用于完成 <b>Image Captioning 图像描述生成</b>。</p>
+        <ul>
+          <li>输入：一张图片；</li>
+          <li>输出：一句英文图片描述；</li>
+          <li>不要求完整复现大规模预训练。</li>
+        </ul>
+      </article>
+
+      <article class="card sky" id="dataset">
+        <h2>3. 数据集</h2>
+        <p>使用 <b>Flickr8k Image Captioning Dataset</b>，本次学习复现只要求使用前 <b>200 张图片</b>。</p>
+        <p>Kaggle 地址：<a class="link" href="https://www.kaggle.com/datasets/adityajn105/flickr8k" target="_blank" rel="noreferrer">https://www.kaggle.com/datasets/adityajn105/flickr8k</a></p>
+      </article>
+
+      <article class="card span-3 sky" id="model">
+        <h2>4. 模型结构</h2>
+        <p>按照 BLIP-2 的核心路线实现：冻结两端，只训练中间桥接模块。</p>
+        <div class="flow">
+          <div class="step"><b>Image</b><span>输入图片</span></div>
+          <div class="step"><b>Frozen Vision Encoder</b><span>推荐 CLIP ViT</span></div>
+          <div class="step"><b>Mini Q-Former</b><span>学生自己实现</span></div>
+          <div class="step"><b>Projection Layer</b><span>映射到词向量维度</span></div>
+          <div class="step"><b>Frozen Language Decoder</b><span>生成 caption</span></div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>5. 推荐组件</h2>
+        <h3>视觉编码器</h3>
+        <p><b>openai/clip-vit-base-patch32</b></p>
+        <p><a class="link" href="https://huggingface.co/openai/clip-vit-base-patch32" target="_blank" rel="noreferrer">Hugging Face 地址</a></p>
+        <h3>语言解码器</h3>
+        <p><b>facebook/opt-125m</b></p>
+        <p><a class="link" href="https://huggingface.co/facebook/opt-125m" target="_blank" rel="noreferrer">Hugging Face 地址</a></p>
+      </article>
+
+      <article class="card mint" id="training">
+        <h2>6. 训练要求</h2>
+        <ul>
+          <li>任务：image captioning；</li>
+          <li>损失函数：cross entropy loss；</li>
+          <li>训练模块：Mini Q-Former + Projection Layer；</li>
+          <li>冻结模块：Vision Encoder + Language Decoder；</li>
+          <li>数据量：Flickr8k 前 200 张图片即可。</li>
+        </ul>
+      </article>
+
+      <article class="card yellow">
+        <h2>7. 最低完成标准</h2>
+        <ul>
+          <li>能够读取 Flickr8k 前 200 张图片及对应 caption；</li>
+          <li>能够搭建 Mini-BLIP2 模型结构；</li>
+          <li>能够完成训练流程。</li>
+        </ul>
+      </article>
+
+      <article class="card span-3 mint" id="submit">
+        <h2>8. 最终提交内容</h2>
+        <div class="submit-list">
+          <div class="submit-item">
+            <div class="num">1</div>
+            <div>
+              <b>实现代码</b>
+              <span>包含数据读取、模型定义、训练脚本、生成/测试脚本。代码需要能从 Flickr8k 前 200 张图片开始训练，并能对测试图片生成英文 caption。</span>
+            </div>
+          </div>
+          <div class="submit-item">
+            <div class="num">2</div>
+            <div>
+              <b>简短实验报告</b>
+              <span>说明复现论文、使用数据集、模型结构、冻结了哪些模块、训练了哪些模块、训练设置，以及最终生成效果。</span>
+            </div>
+          </div>
+          <div class="submit-item">
+            <div class="num">3</div>
+            <div>
+              <b>训练过程记录</b>
+              <span>提供训练 loss 变化或关键日志截图，说明模型确实完成了训练流程。无需达到原论文指标。</span>
+            </div>
+          </div>
+          <div class="submit-item">
+            <div class="num">4</div>
+            <div>
+              <b>生成结果展示</b>
+              <span>至少展示 3—5 张测试图片，并给出真实 caption 与模型生成 caption，用于说明模型已经能够根据图片生成文本。</span>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <p class="footer">Mini-BLIP2 student reproduction brief · focus on pipeline reproduction</p>
+  </main>
+</body>
+</html>
