@@ -1,1 +1,19 @@
 .omc/
+# 虚拟环境
+.venv/
+
+# Claude 相关文件
+.claude/
+.entire/
+Claude全部会话导出/
+export_*.py
+
+# Python 缓存文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 系统文件
+.DS_Store
+Thumbs.db
