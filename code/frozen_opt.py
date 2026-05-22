@@ -21,9 +21,12 @@ class FrozenOPTDecoder(nn.Module):
         # Load model and tokenizer from local path
         self.tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
         if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+            self.tokenizer.pad_token = "[PAD]"
 
         self.model = AutoModelForCausalLM.from_pretrained(model_path).to(device)
+        # Resize embeddings for the new pad token (frozen, so the new row stays random)
+        self.model.resize_token_embeddings(len(self.tokenizer))
         self.config = self.model.config
         self.embed_dim = self.config.hidden_size  # 768 for opt-125m
 

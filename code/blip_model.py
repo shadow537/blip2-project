@@ -96,13 +96,17 @@ class BLIPModel(nn.Module):
         if labels is None:
             labels = input_ids
 
-        # Build full labels: ignore visual prefix positions
+        # Mask padding positions in labels so they don't contribute to loss
+        labels = labels.clone()
+        labels[input_ids == self.pad_token_id] = -100
+
+        # Build full labels: also ignore visual prefix positions
         visual_labels = torch.full(
             (batch_size, self.num_queries), -100,
             dtype=torch.long, device=self.device,
         )
         full_labels = torch.cat([visual_labels, labels.to(self.device)], dim=1)
-        # full_labels: (batch, 32 + text_len)
+        # full_labels: (batch, 32 + text_len), visual + PAD positions = -100
 
         # Hugging Face internally shifts logits/labels for autoregressive loss
         loss = self.opt_decoder.model(

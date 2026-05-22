@@ -52,30 +52,33 @@ def main():
     dataset = ImageDataset(data, processor)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
 
-    features_dict = {}
+    pooled_dict = {}
+    hidden_dict = {}
 
     print("Extracting features...")
     with torch.no_grad():
         for pixel_values, filenames in tqdm(dataloader):
             pixel_values = pixel_values.to(DEVICE)
-            outputs = model(pixel_values)
-            # CLIPVisionModel outputs pooler_output: (batch, 768)
-            features = outputs.pooler_output.cpu().numpy()
+            outputs = model(pixel_values, output_hidden_states=False)
+            # last_hidden_state: (batch, 50, 768) — 1 CLS + 49 patch tokens
+            # pooler_output:      (batch, 768)
+            hidden = outputs.last_hidden_state.cpu().numpy()
+            pooled = outputs.pooler_output.cpu().numpy()
 
-            for fname, feat in zip(filenames, features):
-                features_dict[fname] = feat
+            for fname, h, p in zip(filenames, hidden, pooled):
+                hidden_dict[fname] = h
+                pooled_dict[fname] = p
 
-    # Save features
-    output_path = os.path.join(OUTPUT_DIR, "clip_vit_b32_features.npz")
-    np.savez(output_path, **features_dict)
-    print(f"Saved {len(features_dict)} feature vectors to {output_path}")
+    # Save patch-level features for Q-Former
+    filenames = sorted(hidden_dict.keys())
+    hidden_matrix = np.stack([hidden_dict[f] for f in filenames])  # (200, 50, 768)
+    pooled_matrix = np.stack([pooled_dict[f] for f in filenames])  # (200, 768)
 
-    # Also save filenames list and feature matrix for convenience
-    filenames = sorted(features_dict.keys())
-    feature_matrix = np.stack([features_dict[f] for f in filenames])
     np.save(os.path.join(OUTPUT_DIR, "clip_vit_b32_filenames.npy"), np.array(filenames))
-    np.save(os.path.join(OUTPUT_DIR, "clip_vit_b32_features.npy"), feature_matrix)
-    print(f"Feature matrix shape: {feature_matrix.shape}")
+    np.save(os.path.join(OUTPUT_DIR, "clip_vit_b32_hidden.npy"), hidden_matrix)
+    np.save(os.path.join(OUTPUT_DIR, "clip_vit_b32_pooled.npy"), pooled_matrix)
+    print(f"Hidden states shape: {hidden_matrix.shape}")
+    print(f"Pooled features shape: {pooled_matrix.shape}")
 
 
 if __name__ == "__main__":
