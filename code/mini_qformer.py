@@ -48,6 +48,24 @@ class QFormerLayer(nn.Module):
         return queries
 
 
+class LanguageProjection(nn.Module):
+    """Project Q-Former output queries into the language decoder's embedding space.
+
+    In BLIP-2, the 32 projected queries are prepended to text token embeddings as
+    "soft visual prompts", so the frozen LLM can condition on visual information
+    without any fine-tuning of its own parameters.
+    """
+
+    def __init__(self, hidden_dim, lm_embed_dim, dropout=0.1):
+        super().__init__()
+        self.proj = nn.Linear(hidden_dim, lm_embed_dim)
+        self.norm = nn.LayerNorm(lm_embed_dim)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, queries):
+        return self.dropout(self.norm(self.proj(queries)))
+
+
 class VisionProjector(nn.Module):
     """Linear projection + LayerNorm if vision dim differs from Q-Former hidden dim."""
 
@@ -77,6 +95,8 @@ class MiniQFormer(nn.Module):
         num_layers: number of Q-Former layers (default 2 for "mini")
         num_heads: number of attention heads
         dropout: dropout rate
+        lm_embed_dim: if set, adds a LanguageProjection to map queries into the
+            language decoder's embedding space (e.g. 512 for opt-25m).
     """
 
     def __init__(
@@ -87,10 +107,12 @@ class MiniQFormer(nn.Module):
         num_layers=2,
         num_heads=8,
         dropout=0.1,
+        lm_embed_dim=None,
     ):
         super().__init__()
         self.num_queries = num_queries
         self.hidden_dim = hidden_dim
+        self.lm_embed_dim = lm_embed_dim
 
         self.vision_projector = VisionProjector(vision_dim, hidden_dim)
 
@@ -105,9 +127,14 @@ class MiniQFormer(nn.Module):
 
         self.final_norm = nn.LayerNorm(hidden_dim)
 
-        # Learnable position embedding for queries (optional, helps distinguish queries)
+        # Learnable position embedding for queries
         self.query_pos = nn.Parameter(torch.empty(num_queries, hidden_dim))
         nn.init.normal_(self.query_pos, std=0.02)
+
+        # Optional projection to language model embedding space
+        self.lang_proj = None
+        if lm_embed_dim is not None:
+            self.lang_proj = LanguageProjection(hidden_dim, lm_embed_dim, dropout)
 
     def forward(self, vision_features, self_attn_mask=None):
         """
@@ -116,47 +143,54 @@ class MiniQFormer(nn.Module):
             self_attn_mask: optional attention mask for self-attention (e.g. causal)
 
         Returns:
-            queries: (batch, num_queries, hidden_dim) — 32 refined query embeddings
+            queries: (batch, num_queries, hidden_dim) — 32 refined query embeddings.
+                If lm_embed_dim is set, projected to (batch, num_queries, lm_embed_dim).
         """
         batch_size = vision_features.shape[0]
 
-        # Project vision features if needed
         vision_features = self.vision_projector(vision_features)
 
-        # Expand learnable queries to batch: (num_queries, hidden_dim) -> (batch, num_queries, hidden_dim)
         queries = self.query_tokens.unsqueeze(0).expand(batch_size, -1, -1)
         queries = queries + self.query_pos.unsqueeze(0)
 
         for layer in self.layers:
             queries = layer(queries, vision_features, self_attn_mask)
 
-        return self.final_norm(queries)
+        queries = self.final_norm(queries)
+
+        if self.lang_proj is not None:
+            queries = self.lang_proj(queries)
+
+        return queries
 
 
 if __name__ == "__main__":
-    # Quick smoke test
-    print("Testing MiniQFormer...")
-
-    model = MiniQFormer(
-        vision_dim=768,
-        hidden_dim=768,
-        num_queries=32,
-        num_layers=2,
-        num_heads=8,
-    )
+    print("=== Test 1: MiniQFormer (no language projection) ===")
+    model = MiniQFormer(vision_dim=768, hidden_dim=768, num_queries=32, num_layers=2, num_heads=8)
     model.eval()
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Total params: {total_params:,}")
-    print(f"Trainable params: {trainable_params:,}")
+    print(f"Params: {sum(p.numel() for p in model.parameters()):,}")
 
-    # Simulate CLIP ViT-B/32 last_hidden_state: (batch, 50, 768)
-    dummy_vision_features = torch.randn(4, 50, 768)
+    dummy = torch.randn(4, 50, 768)
+    with torch.no_grad():
+        out = model(dummy)
+    print(f"Input:  {dummy.shape}")
+    print(f"Output: {out.shape}")
+
+    print("\n=== Test 2: MiniQFormer + LanguageProjection (opt-25m, 512d) ===")
+    model_lm = MiniQFormer(
+        vision_dim=768, hidden_dim=768, num_queries=32, num_layers=2,
+        num_heads=8, lm_embed_dim=512,
+    )
+    model_lm.eval()
+    total = sum(p.numel() for p in model_lm.parameters())
+    trainable = sum(p.numel() for p in model_lm.parameters() if p.requires_grad)
+    print(f"Total params: {total:,}")
+    print(f"Trainable params: {trainable:,}")
 
     with torch.no_grad():
-        queries = model(dummy_vision_features)
+        out_lm = model_lm(dummy)
+    print(f"Input:  {dummy.shape}")
+    print(f"Output: {out_lm.shape}  # projected to LM embedding dim")
 
-    print(f"Input  shape:  {dummy_vision_features.shape}  # (batch, num_patches+CLS, vision_dim)")
-    print(f"Output shape:  {queries.shape}              # (batch, num_queries, hidden_dim)")
-    print(f"Number of queries: {queries.shape[1]}")
-    print("Test passed.")
+    assert out_lm.shape == (4, 32, 512), f"Expected (4, 32, 512), got {out_lm.shape}"
+    print("\nAll tests passed.")
