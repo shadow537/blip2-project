@@ -61,6 +61,7 @@ Image → Frozen Vision Encoder (CLIP ViT-B/32) → Mini Q-Former → LanguagePr
 粘贴训练日志或 loss 变化截图。
 
 ![loss变化截图](2026-05-23-20-14-43.png)
+![loss曲线](2026-05-23-22-03-04.png)
 
 ## 7. 生成结果展示
 
