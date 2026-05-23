@@ -117,15 +117,89 @@ class BLIPModel(nn.Module):
 
         return {"logits": logits, "loss": loss}
 
-    @torch.no_grad()
-    def generate(self, vision_features, prompt=None, max_new_tokens=32, **gen_kwargs):
-        """Generate a caption from vision features.
+    def _prepare_gen_inputs(self, vision_features, prompt):
+        """Build inputs_embeds + attention_mask for generation.
 
         Args:
             vision_features: (batch, 50, 768)
-            prompt: optional text prompt string or list of strings.
-                    If None, uses BOS token only.
-            max_new_tokens: max tokens to generate.
+            prompt: list of prompt strings (e.g. BOS tokens)
+
+        Returns:
+            inputs_embeds: (batch, 32 + prompt_len, embed_dim)
+            attention_mask: (batch, 32 + prompt_len)
+        """
+        batch_size = vision_features.shape[0]
+
+        enc = self.opt_decoder.tokenizer(prompt, return_tensors="pt", padding=True)
+        input_ids = enc["input_ids"]
+
+        visual_queries = self.qformer(vision_features.to(self.device))
+        text_embeds = self.opt_decoder.get_text_embeddings(input_ids.to(self.device))
+
+        inputs_embeds = torch.cat([visual_queries, text_embeds], dim=1)
+
+        text_mask = (input_ids != self.pad_token_id).long().to(self.device)
+        visual_mask = torch.ones(batch_size, self.num_queries, dtype=torch.long, device=self.device)
+        attention_mask = torch.cat([visual_mask, text_mask], dim=1)
+
+        return inputs_embeds, attention_mask
+
+    @torch.no_grad()
+    def generate_beam(
+        self, vision_features, prompt=None, num_beams=5, max_new_tokens=64,
+        num_return=1, **gen_kwargs,
+    ):
+        """Beam-search caption generation.
+
+        Args:
+            vision_features: (batch, 50, 768)
+            prompt: text prompt string or list (default: BOS token)
+            num_beams: beam width
+            max_new_tokens: max tokens to generate
+            num_return: number of top beams to return per sample
+
+        Returns:
+            list of decoded strings, length = batch * num_return
+        """
+        self.eval()
+
+        batch_size = vision_features.shape[0]
+        if prompt is None:
+            bos = self.opt_decoder.tokenizer.bos_token or ""
+            prompt = [bos] * batch_size
+        elif isinstance(prompt, str):
+            prompt = [prompt] * batch_size
+
+        inputs_embeds, attention_mask = self._prepare_gen_inputs(vision_features, prompt)
+
+        defaults = dict(
+            num_beams=num_beams,
+            max_new_tokens=max_new_tokens,
+            pad_token_id=self.pad_token_id,
+            eos_token_id=self.opt_decoder.tokenizer.eos_token_id,
+            num_return_sequences=num_return,
+            early_stopping=True,
+            no_repeat_ngram_size=3,
+            length_penalty=1.0,
+        )
+        defaults.update(gen_kwargs)
+
+        output_ids = self.opt_decoder.model.generate(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            **defaults,
+        )
+
+        return [self.opt_decoder.decode(ids) for ids in output_ids]
+
+    @torch.no_grad()
+    def generate(self, vision_features, prompt=None, max_new_tokens=32, **gen_kwargs):
+        """Greedy / sampling-based caption generation.
+
+        Args:
+            vision_features: (batch, 50, 768)
+            prompt: optional text prompt or list (default: BOS token)
+            max_new_tokens: max tokens to generate
 
         Returns:
             list of decoded text strings.
@@ -139,12 +213,22 @@ class BLIPModel(nn.Module):
         elif isinstance(prompt, str):
             prompt = [prompt] * batch_size
 
-        enc = self.opt_decoder.tokenizer(prompt, return_tensors="pt", padding=True)
-        input_ids = enc["input_ids"]
+        inputs_embeds, attention_mask = self._prepare_gen_inputs(vision_features, prompt)
 
-        visual_queries = self.qformer(vision_features.to(self.device))
-        output_ids = self.opt_decoder.generate(
-            visual_queries, input_ids, max_new_tokens=max_new_tokens, **gen_kwargs
+        defaults = dict(
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            temperature=0.9,
+            top_p=0.9,
+            pad_token_id=self.pad_token_id,
+            eos_token_id=self.opt_decoder.tokenizer.eos_token_id,
+        )
+        defaults.update(gen_kwargs)
+
+        output_ids = self.opt_decoder.model.generate(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            **defaults,
         )
 
         return [self.opt_decoder.decode(ids) for ids in output_ids]

@@ -20,9 +20,14 @@ os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 
 class BLIPDataset(Dataset):
-    """Pairs pre-extracted vision features with captions."""
+    """Pairs pre-extracted vision features with captions.
 
-    def __init__(self, hidden_path, filenames_path, caption_file, tokenizer, max_images=200):
+    Args:
+        exclude_filenames: optional set of filenames to exclude (e.g. held-out test set).
+    """
+
+    def __init__(self, hidden_path, filenames_path, caption_file, tokenizer,
+                 max_images=200, exclude_filenames=None):
         self.hidden_states = np.load(hidden_path)       # (N, 50, 768)
         self.filenames = np.load(filenames_path)         # (N,)
         self.tokenizer = tokenizer
@@ -34,12 +39,21 @@ class BLIPDataset(Dataset):
         image_captions = load_flickr8k_captions(caption_file, max_images=max_images)
 
         # Build samples: each (image, caption) is one sample
+        exclude = exclude_filenames or set()
+        num_skipped = 0
         self.samples = []
         for fname, captions in image_captions.items():
             if fname not in self.filename_to_idx:
                 continue
+            if fname in exclude:
+                num_skipped += 1
+                continue
             for cap in captions:
                 self.samples.append((fname, cap))
+
+        if num_skipped:
+            print(f"  Excluded {num_skipped} images (held-out test set), "
+                  f"{len(self.samples)} samples remaining.")
 
     def __len__(self):
         return len(self.samples)
@@ -111,10 +125,17 @@ def train():
 
     tokenizer = model.opt_decoder.tokenizer
 
-    # Dataset & DataLoader
+    # Dataset & DataLoader — hold out last 5 images for testing
+    all_fnames = np.load(FILENAMES_PATH)
+    test_fnames = set(all_fnames[-5:].tolist())
+    print(f"Held-out test images: {sorted(test_fnames)}")
+
     print("Loading dataset...")
-    dataset = BLIPDataset(HIDDEN_PATH, FILENAMES_PATH, CAPTION_FILE, tokenizer, max_images=200)
-    print(f"Total samples: {len(dataset)} (200 images × ~5 captions)")
+    dataset = BLIPDataset(
+        HIDDEN_PATH, FILENAMES_PATH, CAPTION_FILE, tokenizer,
+        max_images=200, exclude_filenames=test_fnames,
+    )
+    print(f"Total samples: {len(dataset)} (train images × ~5 captions)")
 
     dataloader = DataLoader(
         dataset,
@@ -158,15 +179,14 @@ def train():
         print(f"Epoch {epoch}/{NUM_EPOCHS} — avg loss: {avg_loss:.4f}")
 
         # Save checkpoint every 2 epochs
-        if epoch % 2 == 0 or epoch == NUM_EPOCHS:
-            ckpt_path = os.path.join(CHECKPOINT_DIR, f"blip_epoch{epoch}.pt")
-            torch.save({
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "loss": avg_loss,
-            }, ckpt_path)
-            print(f"  Checkpoint saved: {ckpt_path}")
+        ckpt_path = os.path.join(CHECKPOINT_DIR, f"blip_epoch{epoch}.pt")
+        torch.save({
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+             "optimizer_state_dict": optimizer.state_dict(),
+            "loss": avg_loss,
+         }, ckpt_path)
+        print(f"  Checkpoint saved: {ckpt_path}")
 
     # Final save
     final_path = os.path.join(CHECKPOINT_DIR, "blip_final.pt")

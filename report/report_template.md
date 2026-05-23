@@ -20,41 +20,41 @@
 
 ## 4. 模型结构
 
-请说明自己的 Mini-BLIP2 结构，例如：
-
+ Mini-BLIP2 结构：
+ 
 ```text
-Image → Frozen Vision Encoder → Mini Q-Former → Projection Layer → Frozen Language Decoder → Caption
+Image → Frozen Vision Encoder (CLIP ViT-B/32) → Mini Q-Former → LanguageProjection → Frozen Language Decoder (OPT-125m) → Caption
 ```
 
 ### 4.1 Vision Encoder
 
-填写使用的视觉编码器，例如：`openai/clip-vit-base-patch32`。
+使用的视觉编码器：`openai/clip-vit-base-patch32`。
 
 ### 4.2 Mini Q-Former
 
-说明自己实现的 Mini Q-Former：
+说明自己实现的Mini Q-Former：
 
-- query token 数量：
-- hidden size：
-- Transformer 层数：
-- 是否使用 cross-attention：
+- query token 数量：32
+- hidden size：768
+- Transformer 层数：2
+- 是否使用 cross-attention：是
 
 ### 4.3 Language Decoder
 
-填写使用的语言解码器，例如：`facebook/opt-125m`。
+使用的语言解码器：`facebook/opt-125m`。
 
 ## 5. 训练设置
 
 请填写：
 
-- 训练数据量：
-- epoch：
-- batch size：
-- learning rate：
-- optimizer：
-- loss function：
-- 冻结的模块：
-- 训练的模块：
+- 训练数据量：Flickr8k前200张图片（其中5张作为测试集）
+- epoch：10
+- batch size：16
+- learning rate：1e-4
+- optimizer：AdamW（weight_decay=0.01）
+- loss function：cross entropy loss
+- 冻结的模块：Vision Encoder + Language Decoder
+- 训练的模块：Mini Q-Former + Projection Layer
 
 ## 6. 训练过程
 
@@ -70,15 +70,7 @@ Image → Frozen Vision Encoder → Mini Q-Former → Projection Layer → Froze
 
 ## 7. 生成结果展示
 
-至少展示 3—5 个例子。
 
-| 图片编号 | 真实 Caption | 模型生成 Caption |
-|---|---|---|
-| 1 |  |  |
-| 2 |  |  |
-| 3 |  |  |
-
-如果方便，可以把图片也插入报告中。
 
 ## 8. 总结
 
